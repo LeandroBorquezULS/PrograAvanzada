@@ -1,0 +1,31 @@
+{
+  "total_events": 10000000,
+  "files": [
+    "part-000.jsonl",
+    "part-001.jsonl",
+    "part-002.jsonl",
+    "part-003.jsonl",
+    "part-004.jsonl",
+    "part-005.jsonl",
+    "part-006.jsonl",
+    "part-007.jsonl",
+    "part-008.jsonl",
+    "part-009.jsonl",
+    "part-010.jsonl",
+    "part-011.jsonl",
+    "part-012.jsonl",
+    "part-013.jsonl",
+    "part-014.jsonl",
+    "part-015.jsonl"
+  ],
+  "bytes_written": 1429540940,
+  "seed": 42,
+  "workers": 16,
+  "architecture": "shard",
+  "batch_size": 10000,
+  "sim_days": 9,
+  "duration_seconds": 28.51437993899981,
+  "events_per_second": 350700.24392579397,
+  "python": "3.11.16",
+  "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.41"
+}
