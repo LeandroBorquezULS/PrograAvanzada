@@ -19,17 +19,41 @@ class Reefer:
         return round(self.temp, 2)
 
 class SensorFisico:
-    """Modelo genérico con inercia y ruido para métricas no reefer."""
+    """Modelo genérico con inercia, ruido y límites opcionales."""
 
-    def __init__(self, sid, metric, unit, rng, base, noise, drift=0.0):
-        self.sid, self.metric, self.unit = sid, metric, unit
-        self.rng, self.value = rng, base
-        self.noise, self.drift = noise, drift
+    def __init__(
+        self,
+        sid,
+        metric,
+        unit,
+        rng,
+        base,
+        noise,
+        drift=0.0,
+        min_value=None,
+        max_value=None,
+    ):
+        self.sid = sid
+        self.metric = metric
+        self.unit = unit
+        self.rng = rng
+        self.value = base
+        self.noise = noise
+        self.drift = drift
+        self.min_value = min_value
+        self.max_value = max_value
 
     def tick(self, load=1.0):
         target = self.value + self.drift * load
         self.value += (target - self.value) * 0.05
         self.value += self.rng.gauss(0.0, self.noise)
+
+        if self.min_value is not None:
+            self.value = max(self.min_value, self.value)
+
+        if self.max_value is not None:
+            self.value = min(self.max_value, self.value)
+
         return round(self.value, 2)
 
 class SimuladorSitio3:
@@ -53,8 +77,18 @@ class SimuladorSitio3:
         ]
         self.ambientales = []
         for i in range(1, 13):
-            self.ambientales.append(SensorFisico(f"AMBIENTE_S3_{i:02d}", "humidity", "%",
-                                                 random.Random(seed+400+i), 65.0, 0.8))
+            self.ambientales.append(
+                SensorFisico(
+                    f"AMBIENTE_S3_{i:02d}",
+                    "humidity",
+                    "%",
+                    random.Random(seed + 400 + i),
+                    65.0,       # humedad inicial: 65 %
+                    0.8,        # ruido
+                    min_value=0.0,
+                    max_value=100.0,
+                )
+            )
 
     def tick(self, dt_s=15):
         eventos = []
