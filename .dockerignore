@@ -1,10 +1,12 @@
+.git/
 .gitignore
-Dockerfile
-data/raw/*
-!data/raw/.gitkeep
-__pycache__/
+**pycache**/
 *.pyc
 .venv/
 venv/
 .DS_Store
-bench/*.pngs
+data/raw/*
+!data/raw/.gitkeep
+bench/*.png
+Dockerfile
+docker-compose.yml
