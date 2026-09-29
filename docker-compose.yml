@@ -1,0 +1,131 @@
+# =============================================================================
+#  Clúster Spark local — Fase 2, Laboratorio de Programación Avanzada
+#  Terminal Puerto Coquimbo, Sitio 3
+# =============================================================================
+#  Levantar:      docker compose up -d --build
+#  Ver estado:    docker compose ps
+#  Escalar:       docker compose up -d --scale spark-worker=3
+#  Apagar:        docker compose down
+# =============================================================================
+
+name: sitio3-fase2
+
+# Bloque reutilizable: los tres roles comparten imagen, red y volúmenes.
+# La clave está en que TODOS montan el proyecto en la MISMA ruta (/opt/workspace).
+# Con un sistema de archivos local (no HDFS/S3), cada executor abre el archivo por
+# su cuenta: si la ruta no existe idéntica en los workers, el driver lee bien y los
+# executors fallan con FileNotFoundException. Es el error más confuso de este montaje.
+x-spark-comun: &spark-comun
+  build:
+    context: ./docker
+    args:
+      SPARK_VERSION: ${SPARK_VERSION:-4.0.1}
+  image: lab-spark:${SPARK_VERSION:-4.0.1}
+  volumes:
+    - ./:/opt/workspace
+    - spark-events:/tmp/spark-events
+  networks:
+    - lab
+  restart: unless-stopped
+
+services:
+
+  # ---------------------------------------------------------------------------
+  #  MASTER — coordina el clúster. No ejecuta trabajo: solo reparte.
+  # ---------------------------------------------------------------------------
+  spark-master:
+    <<: *spark-comun
+    container_name: spark-master
+    hostname: spark-master
+    command: >
+      /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+      --host spark-master
+      --port 7077
+      --webui-port 8080
+    ports:
+      - "${PUERTO_MASTER_UI:-8080}:8080"   # UI del clúster
+      - "${PUERTO_MASTER:-7077}:7077"      # puerto de registro de workers/driver
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  #  WORKERS — aportan cores y memoria. Aquí corren los executors.
+  # ---------------------------------------------------------------------------
+  spark-worker:
+    <<: *spark-comun
+    command: >
+      /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker
+      spark://spark-master:7077
+      --cores ${SPARK_WORKER_CORES:-2}
+      --memory ${SPARK_WORKER_MEMORY:-2g}
+      --webui-port 8081
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    deploy:
+      replicas: ${SPARK_WORKERS:-2}
+    # Rango de puertos porque hay varias réplicas y cada una necesita el suyo.
+    ports:
+      - "8081-8090:8081"
+
+  # ---------------------------------------------------------------------------
+  #  JUPYTER — aquí vive el DRIVER. Es donde los alumnos escriben PySpark.
+  # ---------------------------------------------------------------------------
+  jupyter:
+    <<: *spark-comun
+    container_name: jupyter
+    hostname: jupyter
+    command: >
+      jupyter lab
+      --ip=0.0.0.0
+      --port=8888
+      --no-browser
+      --allow-root
+      --notebook-dir=/opt/workspace
+      --IdentityProvider.token=${JUPYTER_TOKEN:-lab-sitio3}
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    ports:
+      - "${PUERTO_JUPYTER:-8889}:8888"
+      # UI del driver. Spark usa 4040 y si está ocupado sube a 4041, 4042...
+      # por eso se publica un rango pequeño.
+      - "${PUERTO_DRIVER_UI:-4040}-4044:4040-4044"
+    environment:
+      # El notebook lee estas variables, así no hay direcciones escritas a mano.
+      SPARK_MASTER_URL: spark://spark-master:7077
+      # CRÍTICO: el driver está dentro de este contenedor, y los executors tienen
+      # que poder volver a conectarse a él. Si no se fija, el driver anuncia su IP
+      # interna y el trabajo queda colgado en estado RUNNING sin avanzar nunca.
+      SPARK_DRIVER_HOST: jupyter
+      SPARK_DRIVER_MEMORY: ${SPARK_DRIVER_MEMORY:-2g}
+      SPARK_EXECUTOR_MEMORY: ${SPARK_EXECUTOR_MEMORY:-2g}
+      SPARK_WORKER_CORES: ${SPARK_WORKER_CORES:-2}
+
+  # ---------------------------------------------------------------------------
+  #  HISTORY SERVER (opcional) — permite revisar la ejecución DESPUÉS de cerrar
+  #  la sesión. La UI del puerto 4040 muere con el notebook; esta sobrevive.
+  #  Se levanta aparte:   docker compose --profile history up -d
+  # ---------------------------------------------------------------------------
+  spark-history:
+    <<: *spark-comun
+    container_name: spark-history
+    hostname: spark-history
+    profiles: ["history"]
+    command: >
+      /opt/spark/bin/spark-class org.apache.spark.deploy.history.HistoryServer
+    ports:
+      - "${PUERTO_HISTORY_UI:-18080}:18080"
+
+networks:
+  lab:
+    driver: bridge
+
+volumes:
+  # Volumen compartido para los logs de eventos: lo escribe el driver y lo lee
+  # el History Server.
+  spark-events:
