@@ -52,5 +52,5 @@ Con la misma semilla y el mismo número de trabajadores se busca producir result
 
 ## Git
 
-`data/raw/` se ignora porque el dataset completo supera ampliamente el tamaño razonable para Git.
+`data/raw/` se ignora, porque el dataset completo supera ampliamente el tamaño razonable para Git.
 `data/muestra/` está destinada a una muestra versionada de 50.000 eventos.
